@@ -138,6 +138,7 @@ public:
         lg(Debug, "client [%s: %d] close done", connection->ip_.c_str(), connection->port_);
         close(fd);
         connections_.erase(fd);
+        tm_->LazyDelete(fd);
     }
     void DisPatcher()
     {
@@ -165,7 +166,7 @@ public:
         while(tm_->IsTopExpired()){
             auto top_time = tm_->GetTop()->connect;
             int sockfd = top_time->Sockfd();
-            tm_->DeleteTop();
+            // tm_->DeleteTop();
             // 找不到说明是客户端主动释放的
             if(connections_.find(sockfd) != connections_.end())
             connections_[sockfd]->except_cb(top_time);

@@ -24,7 +24,17 @@ public:
         while (!timers.empty() && timers.top()->expired_time <= std::time(nullptr))
         {
             int sockfd = (timers.top()->connect)->Sockfd();
-            if (timers.top()->cnt >= 5)
+            // 处理惰性删除
+            if(timer_map.find(sockfd) == timer_map.end()) {
+                timers.pop();
+                continue;
+            }
+            if(timers.top()->cnt != timer_map[sockfd]->cnt || timers.top()->expired_time != timer_map[sockfd]->expired_time)
+            {
+                timers.pop();
+                timers.emplace(timer_map[sockfd]);
+            }
+            else if (timers.top()->cnt >= 5)
             {
                 auto timer = timers.top();
                 DeleteTop();
@@ -32,10 +42,6 @@ public:
                 timer->cnt = 0;
                 timers.emplace(timer);
                 timer_map[sockfd] = timer;
-            } else if(timers.top()->cnt != timer_map[sockfd]->cnt || timers.top()->expired_time != timer_map[sockfd]->expired_time)
-            {
-                timers.pop();
-                timers.emplace(timer_map[sockfd]);
             }
             else
             {
@@ -44,10 +50,9 @@ public:
         }
         return false;
     }
-    void DeleteTop()
-    {
-        timer_map.erase(timers.top()->connect->Sockfd());
-        timers.pop();
+
+    void LazyDelete(int sockfd){
+        timer_map.erase(sockfd);
     }
     std::shared_ptr<Timer> GetTop()
     {
@@ -55,7 +60,18 @@ public:
     }
     void UpdateTime(int sockfd)
     {
+        // 检测链接是否已被删除
+        if(timer_map.find(sockfd) == timer_map.end()) return;
         if(timers.empty()) return;
+        // 创建新的 Timer（避免共享指针副作用）
+        auto new_timer = std::make_shared<Timer>(
+        std::time(nullptr) + alive_gap,
+        timer_map[sockfd]->cnt + 1,
+        timer_map[sockfd]->connect
+        );
+
+    // 更新 timer_map
+        timer_map[sockfd] = new_timer;
         timer_map[sockfd]->cnt++;
         timer_map[sockfd]->expired_time = time(nullptr) + alive_gap;
     }
